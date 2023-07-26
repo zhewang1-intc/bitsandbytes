@@ -12,6 +12,8 @@ import bitsandbytes as bnb
 from bitsandbytes import functional as F
 from scipy.stats import norm
 
+import fp4_ref
+
 torch.set_printoptions(
     precision=5, sci_mode=False, linewidth=120, edgeitems=20, threshold=10000
 )
@@ -2257,10 +2259,13 @@ def test_fp4_quant(dtype):
             result = sign*exp*frac
         code[idx] = result
 
-    A1 = torch.randn(1024, 1024, device='cuda', dtype=dtype)
+    A1 = torch.randn(1023, 1023, device='cuda', dtype=dtype)
+    A11=A1.to("cpu")
     qa, SA = F.quantize_fp4(A1, blocksize=64)
+    qaa,SAA=fp4_ref.ref_quantizeblockwise_fp4(A11,blocksize=64)
+    np.allclose(qa.cpu(),qaa,1.e-1)
+    np.allclose(SA[0].cpu(),SAA,1)
     A2 = F.dequantize_fp4(qa, SA)
-
     err = (A1 - A2).abs().float()
     relerr = (err/(A1.abs().float()+1e-8)).mean()
     idx = err > 1.0
@@ -2553,3 +2558,4 @@ def test_gemv_eye_4bit(storage_type, dtype, double_quant):
         #torch.testing.assert_close(A, C2, rtol=1e-5, atol=0.080)
 
 
+test_fp4_quant(torch.float32)

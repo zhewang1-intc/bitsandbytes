@@ -162,8 +162,8 @@ class Params4bit(torch.nn.Parameter):
         out = torch.zeros(1024,1, dtype=torch.uint8)
         torch.ops.load_library("/home/zhe/bitsandbytes/tests/custom_op/build/libcustom_allreduce_op.so")
         torch.ops.my_ops.ref_fp4_quantize(rw,absmax,out,64,2048)
-        print(absmax)
-        print(out)
+        # print(absmax)
+        # print(out)
 
         return self
 

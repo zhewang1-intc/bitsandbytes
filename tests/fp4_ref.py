@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-def ref_quantizeblockwise_fp4(A: Tensor,absmax: Tensor,out: Tensor,blocksize=64,compress_statics=False,quant_type="fp4"):
+def ref_quantizeblockwise_fp4(A: Tensor,absmax: Tensor=None,out: Tensor=None,blocksize=64,compress_statics=False,quant_type="fp4"):
     n = A.numel()
     input_shape = A.shape
 
@@ -15,4 +15,8 @@ def ref_quantizeblockwise_fp4(A: Tensor,absmax: Tensor,out: Tensor,blocksize=64,
 
     assert blocksize in [4096, 2048, 1024, 512, 256, 128, 64]
 
+    torch.ops.load_library("/home/zhe/bitsandbytes/tests/custom_op/build/libcustom_allreduce_op.so")
+    torch.ops.my_ops.ref_fp4_quantize(A,absmax,out,64,n)
+
+    return absmax,out
     
