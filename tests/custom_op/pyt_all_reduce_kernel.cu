@@ -45,5 +45,70 @@ torch::Tensor all_reduce_launcher(torch::Tensor input) {
   return output;
 }
 
-void fp4_quantize_launcher(const torch::Tensor& A, const torch::Tensor& absmax,
-                           torch::Tensor& out, int64_t blocksize, int64_t n) {}
+unsigned char dQuantizeFP4(float x) {
+  // FP4 with bias of 3
+  // first bit is a sign
+  // subnormals
+  // 0b000 = 0
+  // 0b001 = 0.0625
+  // 0b110 = 2
+  // 0b111 = 3
+  // 0b100 = 4
+  // 0b101 = 6
+  // 0b010 = 8
+  // 0b011 = 12
+
+  // we do a binary search
+  // the pivots are divided by 12 (the FP4 absmax)
+  // since we assum input data is in [-1.0, 1.0]
+
+  // !be careful here, its easy to make a mistake
+  // that is difficult to noice if you add an extra
+  // zero somewhere!
+
+  int sign = x < 0 ? 0b1000 : 0b0000;
+  x = fabsf(x);
+  if (x > 0.29166667f)
+    if (x > 0.583333f)
+      if (x > 0.8333333f)
+        return 0b0011 + sign;
+      else
+        return 0b0010 + sign;
+    else if (x > 0.4166667f)
+      return 0b101 + sign;
+    else
+      return 0b100 + sign;
+  else if (x > 0.0859375f)
+    if (x > 0.20833333f)
+      return 0b0111 + sign;
+    else
+      return 0b0110 + sign;
+  else if (x > 0.00260417f)
+    return 0b0001 + sign;
+  else
+    return 0b0000 + sign;
+}
+
+void fp4_quantize_launcher(const torch::Tensor& A, torch::Tensor& absmax,
+                           torch::Tensor& out, int64_t blocksize, int64_t n) {
+  auto blocks = absmax.sizes()[0];
+  auto src = A.data_ptr<float>();
+  auto absmax_ptr = absmax.data_ptr<float>();
+  auto out_ptr = out.data_ptr<unsigned char>();
+  for (int b = 0; b < blocks; b++) {
+    float max = -99999999999999.f;
+    size_t offset = b * blocksize;
+    for (int i = 0; i < blocksize; i++) {
+      if (offset + i >= n) break;
+      max = std::abs(src[offset + i]) > max ? std::abs(src[offset + i]) : max;
+    }
+    absmax_ptr[b] = max;
+    for (int i = 0; i < blocksize / 2; i++) {
+      unsigned char packed_4bit = 0;
+      if (offset + i * 2 >= n) break;
+      packed_4bit |= dQuantizeFP4(src[offset + 2 * i] * (1.f / max)) << 4;
+      packed_4bit |= dQuantizeFP4(src[offset + 2 * i + 1] * (1.f / max));
+      out_ptr[offset / 2 + i] = packed_4bit;
+    }
+  }
+}

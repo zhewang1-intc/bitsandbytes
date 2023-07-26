@@ -154,9 +154,16 @@ class Params4bit(torch.nn.Parameter):
 
     def cuda(self, device):
         w = self.data.contiguous().half().cuda(device)
+        rw=self.data.contiguous()
         w_4bit, quant_state = bnb.functional.quantize_4bit(w, blocksize=self.blocksize, compress_statistics=self.compress_statistics, quant_type=self.quant_type)
         self.data = w_4bit
         self.quant_state = quant_state
+        absmax=torch.zeros(32,dtype=torch.float)
+        out = torch.zeros(1024,1, dtype=torch.uint8)
+        torch.ops.load_library("/home/zhe/bitsandbytes/tests/custom_op/build/libcustom_allreduce_op.so")
+        torch.ops.my_ops.ref_fp4_quantize(rw,absmax,out,64,2048)
+        print(absmax)
+        print(out)
 
         return self
 

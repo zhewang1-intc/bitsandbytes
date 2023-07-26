@@ -838,7 +838,8 @@ def quantize_4bit(A: Tensor, absmax: Tensor = None, out: Tensor = None, blocksiz
     else:
         raise ValueError(f"Blockwise quantization only supports 16/32-bit floats, but got {A.dtype}")
     post_call(A.device)
-
+    print(absmax)
+    print(out)
     datatype = get_4bit_type(quant_type, device=A.device)
 
     if compress_statistics:
