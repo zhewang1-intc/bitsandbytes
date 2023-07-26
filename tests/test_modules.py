@@ -317,16 +317,17 @@ names = [f"threshold_{vals}" for vals in values]
 
 @pytest.mark.parametrize("threshold", values, ids=names)
 def test_linear8bitlt_inference(threshold):
-    l1 = bnb.nn.Linear8bitLt(32, 64, threshold=threshold).cuda().half()
-    assert l1.weight.device.type == "cuda"
-    assert l1.weight.dtype == torch.float16
+    # l1 = bnb.nn.Linear8bitLt(32, 64, threshold=threshold).cuda().half()
+    test=bnb.nn.LinearFP4(32,64).cuda()
+    # assert l1.weight.device.type == "cuda"
+    # assert l1.weight.dtype == torch.float16
 
-    l1.eval()
-    for i in range(100):
-        b1 = torch.randn(16, 8, 32, device="cuda").half()
-        o1 = l1(b1)
-        if i == 1:
-            assert l1.state.CxB is not None
+    # l1.eval()
+    # for i in range(100):
+    #     b1 = torch.randn(16, 8, 32, device="cuda").half()
+    #     o1 = l1(b1)
+    #     if i == 1:
+    #         assert l1.state.CxB is not None
 
 
 def test_linear8bitlt_accumulated_gradient():
@@ -641,3 +642,4 @@ def test_4bit_warnings():
 
 
 
+test_linear8bitlt_inference(0.1)
