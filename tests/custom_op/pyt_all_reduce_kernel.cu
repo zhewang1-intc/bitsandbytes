@@ -45,6 +45,29 @@ torch::Tensor all_reduce_launcher(torch::Tensor input) {
   return output;
 }
 
+float dDequantizeFP4Tree(unsigned char val, float absmax) {
+  float sign = (val & 0b1000) == 8 ? -1.0f : 1.0f;
+  if ((val & 0b0100) == 4)                   // 0
+    if ((val & 0b0010) == 2)                 // 01
+      if ((val & 0b0001) == 1)               // 111
+        return 0.25000000f * absmax * sign;  // 1111
+      else
+        return 0.16666667f * absmax * sign;  // 1110
+    else if ((val & 0b0001) == 1)            // 110
+      return 0.50000000f * absmax * sign;    // 1101
+    else
+      return 0.33333333f * absmax * sign;  // 1100
+  else if ((val & 0b0010) == 2)            // 10
+    if ((val & 0b0001) == 1)               // 101
+      return 1.00000000f * absmax * sign;  // 1011
+    else
+      return 0.66666667f * absmax * sign;     // 1010
+  else if ((val & 0b0001) == 1)               // 100
+    return 5.208333333e-03f * absmax * sign;  // 1001
+  else
+    return 0.00000000f * absmax * sign;  // 1000
+}
+
 unsigned char dQuantizeFP4(float x) {
   // FP4 with bias of 3
   // first bit is a sign
@@ -109,6 +132,26 @@ void fp4_quantize_launcher(const torch::Tensor& A, torch::Tensor& absmax,
       packed_4bit |= dQuantizeFP4(src[offset + 2 * i] * (1.f / max)) << 4;
       packed_4bit |= dQuantizeFP4(src[offset + 2 * i + 1] * (1.f / max));
       out_ptr[offset / 2 + i] = packed_4bit;
+    }
+  }
+}
+
+void fp4_dequantize_launcher(const torch::Tensor& A, torch::Tensor& absmax,
+                             torch::Tensor& out, int64_t blocksize, int64_t n) {
+  auto blocks = absmax.sizes()[0];
+  auto src = A.data_ptr<unsigned char>();
+  auto absmax_ptr = absmax.data_ptr<float>();
+  auto out_ptr = out.data_ptr<float>();
+  for (int b = 0; b < blocks; b++) {
+    size_t offset = b * blocksize;
+    auto max = absmax_ptr[b];
+    for (int i = 0; i < blocksize / 2; i++) {
+      unsigned char packed_4bit = 0;
+      if (offset + i * 2 >= n) break;
+      out_ptr[offset + 2 * i] =
+          dDequantizeFP4Tree(src[offset / 2 + i] >> 4, max);
+      out_ptr[offset + 2 * i + 1] =
+          dDequantizeFP4Tree(src[offset / 2 + i] & 0x0f, max);
     }
   }
 }
